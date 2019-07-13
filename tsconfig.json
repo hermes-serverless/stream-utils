@@ -9,9 +9,8 @@
     "skipLibCheck": true,
     "sourceMap": true,
     "outDir": "build",
-    "declaration": true,
-    "baseUrl": "."
+    "declaration": true
   },
   "include": ["./src/**/*"],
-  "exclude": ["node_modules, ./src/__tests__"]
+  "exclude": ["node_modules", "./src/__tests__"]
 }

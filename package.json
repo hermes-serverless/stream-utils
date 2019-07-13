@@ -1,0 +1,50 @@
+{
+  "name": "@hermes-serverless/stream-utils",
+  "version": "0.0.1",
+  "description": "",
+  "main": "build/index.js",
+  "types": "build/index.d.ts",
+  "files": [
+    "build/**/*"
+  ],
+  "scripts": {
+    "test": "jest --logHeapUsage",
+    "build": "rm -rf build && yarn tsc",
+    "prepare": "yarn build",
+    "prepublishOnly": "yarn test && yarn lint",
+    "lint": "tslint -c tslint.json 'src/**/*.ts'",
+    "format": "prettier --config ./prettier.config.js --write \"src/**/*.ts\" \"src/**/*.js\"",
+    "preversion": "yarn lint && yarn format",
+    "version": "git add --all",
+    "postversion": "git push && git push --tags"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hermes-serverless/stream-utils"
+  },
+  "author": "Tiago Nápoli <napoli.tiago96@gmail.com>",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/hermes-serverless/stream-utils/issues"
+  },
+  "homepage": "https://github.com/hermes-serverless/stream-utils#readme",
+  "dependencies": {
+    "@hermes-project/custom-promises": "^0.0.1"
+  },
+  "devDependencies": {
+    "@types/execa": "^0.9.0",
+    "@types/jest": "^24.0.11",
+    "@types/md5-file": "^4.0.0",
+    "@types/node": "^12.6.1",
+    "execa": "^2.0.3",
+    "jest": "^24.7.1",
+    "md5-file": "^4.0.0",
+    "prettier": "^1.17.0",
+    "ts-jest": "^24.0.2",
+    "ts-node": "^8.1.0",
+    "tslint": "^5.16.0",
+    "tslint-config-airbnb": "^5.11.1",
+    "tslint-config-prettier": "^1.18.0",
+    "typescript": "^3.5.3"
+  }
+}

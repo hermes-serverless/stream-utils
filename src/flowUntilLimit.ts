@@ -1,31 +1,47 @@
 import stream, { Readable, Writable } from 'stream'
 import util from 'util'
 
-interface PipeUntilLimitArgs {
-  src: Readable
-  dest: Writable
+interface FlowUntilLimitOptions {
+  dest?: Writable
   limit?: number
   onData?: (data: Buffer | string) => void
   onLimit?: () => void
 }
 
-export const _canTransferData = (dataTransfered: number, limit: null | number) => {
+type Nullable<T> = T | null
+interface NormalizedOptions {
+  dest: Nullable<Writable>
+  limit: Nullable<number>
+  onData: Nullable<(data: Buffer | string) => void>
+  onLimit: Nullable<() => void | null>
+}
+
+const normalizeOpts = (options: FlowUntilLimitOptions): NormalizedOptions => {
+  return {
+    dest: null,
+    limit: null,
+    onData: null,
+    onLimit: null,
+    ...options,
+  } as NormalizedOptions
+}
+
+export const _canTransferData = (dataTransfered: number, limit: Nullable<number>) => {
   return limit == null || dataTransfered < limit
 }
 
 export const _willSurpassLimit = (
   dataToWrite: string | Buffer,
   dataTransfered: number,
-  limit: null | number
+  limit: Nullable<number>
 ) => {
   return limit != null && dataTransfered + dataToWrite.length > limit
 }
 
-export const pipeUntilLimit = async (args: PipeUntilLimitArgs) => {
-  const { src, dest, onData: onDataCallback, onLimit: onLimitCallback, limit } = {
-    limit: null,
-    ...args,
-  } as PipeUntilLimitArgs
+export const flowUntilLimit = async (src: Readable, options?: FlowUntilLimitOptions) => {
+  const { dest, onData: onDataCallback, onLimit: onLimitCallback, limit } = normalizeOpts(
+    options || {}
+  )
 
   let dataTransfered = 0
   let isDrained = true
@@ -36,7 +52,7 @@ export const pipeUntilLimit = async (args: PipeUntilLimitArgs) => {
     closedSrc = true
     src.removeListener('data', onData)
     src.resume()
-    if (isDrained) dest.end()
+    if (isDrained && dest != null) dest.end()
   }
 
   const onData = (chunk: Buffer) => {
@@ -50,7 +66,7 @@ export const pipeUntilLimit = async (args: PipeUntilLimitArgs) => {
         dataToWrite = dataToWrite.slice(0, allowedSize)
       }
 
-      const ret = dest.write(dataToWrite)
+      const ret = dest != null ? dest.write(dataToWrite) : true
       dataTransfered += dataToWrite.length
       if (onDataCallback) onDataCallback(dataToWrite)
       if (!ret) {
@@ -72,7 +88,7 @@ export const pipeUntilLimit = async (args: PipeUntilLimitArgs) => {
   }
 
   src.on('data', onData)
-  dest.on('drain', onDrain)
+  if (dest != null) dest.on('drain', onDrain)
 
   const finishSrc = util
     .promisify(stream.finished)(src)
@@ -80,11 +96,14 @@ export const pipeUntilLimit = async (args: PipeUntilLimitArgs) => {
       src.removeListener('data', onData)
     })
 
-  const finishDest = util
-    .promisify(stream.finished)(dest)
-    .finally(() => {
-      dest.removeListener('drain', onDrain)
-    })
+  const finishDest =
+    dest != null
+      ? util
+          .promisify(stream.finished)(dest)
+          .finally(() => {
+            dest.removeListener('drain', onDrain)
+          })
+      : Promise.resolve()
 
   let error
   try {

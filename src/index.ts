@@ -1,1 +1,1 @@
-export { pipeUntilLimit } from './pipeUntilLimit'
+export { flowUntilLimit } from './flowUntilLimit'

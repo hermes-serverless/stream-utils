@@ -1,5 +1,5 @@
 import fs from 'fs'
-import { pipeUntilLimit, _canTransferData, _willSurpassLimit } from '../pipeUntilLimit'
+import { flowUntilLimit, _canTransferData, _willSurpassLimit } from '../flowUntilLimit'
 import { checkMD5, checkSize, getReadStream, TestFileManager } from './testUtils'
 
 const TIMEOUT = 30 * 1000
@@ -44,8 +44,8 @@ describe('Check _willSurpassLimit', () => {
   )
 })
 
-describe('Check if streaming for pipeUntilLimit is working properly', () => {
-  const testFiles = new TestFileManager('pipeUntilLimit-basic')
+describe('Check if streaming for flowUntilLimit is working properly', () => {
+  const testFiles = new TestFileManager('flowUntilLimit-basic')
 
   testFiles.createStreamFile({ baseSizeKB: 10 * MB })
   testFiles.createStreamFile({ baseSizeKB: 100 * MB })
@@ -76,8 +76,7 @@ describe('Check if streaming for pipeUntilLimit is working properly', () => {
       const { file, filepath } = await testFiles.getWriteStream()
       const src = await getReadStream(testFile)
 
-      await pipeUntilLimit({
-        src,
+      await flowUntilLimit(src, {
         dest: file,
       })
 
@@ -88,10 +87,24 @@ describe('Check if streaming for pipeUntilLimit is working properly', () => {
     },
     TIMEOUT
   )
+
+  test.each(testFiles.files)(
+    'Without dest stream: %s',
+    async (_, bytes, testFile) => {
+      const src = await getReadStream(testFile)
+
+      const dataTransfered = await flowUntilLimit(src)
+
+      src.destroy()
+      const { size } = fs.statSync(testFile)
+      expect(dataTransfered).toBe(size)
+    },
+    TIMEOUT
+  )
 })
 
-describe('Check if limits for pipeUntilLimit is working properly', () => {
-  const testFiles = new TestFileManager('pipeUntilLimit-limit')
+describe('Check if limits for flowUntilLimit is working properly', () => {
+  const testFiles = new TestFileManager('flowUntilLimit-limit')
 
   testFiles.createStreamFile({ baseSizeKB: 1 })
   testFiles.createStreamFile({ baseSizeKB: 10 })
@@ -124,7 +137,7 @@ describe('Check if limits for pipeUntilLimit is working properly', () => {
     testFiles.cleanUpTestFiles()
   })
 
-  describe('Tests for limits', () => {
+  describe('Tests for limits with dest stream', () => {
     const setupPipeAndCheckStreamedData = async (
       testFile: string,
       expectedBufferSize: number,
@@ -140,11 +153,10 @@ describe('Check if limits for pipeUntilLimit is working properly', () => {
       const src = await getReadStream(testFile)
       const { file: dest, filepath } = await testFiles.getWriteStream()
 
-      await pipeUntilLimit({
+      await flowUntilLimit(src, {
         limit,
         onLimit,
         onData,
-        src,
         dest,
       })
 
@@ -156,7 +168,7 @@ describe('Check if limits for pipeUntilLimit is working properly', () => {
         const resBuffer = fs.readFileSync(filepath)
         expect(allDataBuffer.length).toBe(expectedBufferSize)
         expect(resBuffer.length).toBe(expectedBufferSize)
-        expect(Buffer.compare(resBuffer, allDataBuffer)).toBe(0)
+        expect(resBuffer.equals(allDataBuffer)).toBe(true)
         return {
           onData,
           onLimit,
@@ -165,6 +177,83 @@ describe('Check if limits for pipeUntilLimit is working properly', () => {
         console.error(`Error reading file ${filepath}`, err)
         console.log(testFiles.getFilesOnDir())
         throw err
+      }
+    }
+
+    test.each(testFiles.files)(
+      'Should reach limit - Random Limits for: %s',
+      async (_, bytes, testFile) => {
+        let limit = Math.floor(Math.random() * bytes)
+        if (limit === bytes) limit -= 1
+        const { onLimit, onData } = await setupPipeAndCheckStreamedData(testFile, limit, limit)
+        expect(onLimit).toBeCalledTimes(1)
+        expect(onData).toBeCalled()
+      },
+      TIMEOUT
+    )
+
+    test.each(testFiles.files)(
+      'Should not reach limit - limit = size',
+      async (_, bytes, testFile) => {
+        const limit = bytes
+        const { onLimit, onData } = await setupPipeAndCheckStreamedData(testFile, bytes, limit)
+        expect(onLimit).not.toBeCalled()
+        expect(onData).toBeCalled()
+      },
+      TIMEOUT
+    )
+
+    test.each(testFiles.files)(
+      'Should not reach limit - limit = undefined',
+      async (_, bytes, testFile) => {
+        const { onLimit, onData } = await setupPipeAndCheckStreamedData(testFile, bytes)
+        expect(onLimit).not.toBeCalled()
+        expect(onData).toBeCalled()
+      },
+      TIMEOUT
+    )
+
+    test.each(testFiles.files)(
+      'Should reach limit - limit = 0',
+      async (_, bytes, testFile) => {
+        const limit = 0
+        const { onLimit, onData } = await setupPipeAndCheckStreamedData(testFile, limit, limit)
+        expect(onLimit).toBeCalledTimes(1)
+        expect(onData).toBeCalledTimes(1)
+      },
+      TIMEOUT
+    )
+  })
+
+  describe('Tests for limits without dest stream', () => {
+    const setupPipeAndCheckStreamedData = async (
+      testFile: string,
+      expectedBufferSize: number,
+      limit?: number
+    ) => {
+      const onLimit = jest.fn()
+      const buffers: Buffer[] = []
+
+      const onData = jest.fn((data: Buffer) => {
+        buffers.push(data)
+      })
+
+      const src = await getReadStream(testFile)
+
+      const dataTransfered = await flowUntilLimit(src, {
+        limit,
+        onLimit,
+        onData,
+      })
+
+      src.destroy()
+
+      const allDataBuffer = Buffer.concat(buffers)
+      expect(allDataBuffer.length).toBe(expectedBufferSize)
+      expect(dataTransfered).toBe(expectedBufferSize)
+      return {
+        onData,
+        onLimit,
       }
     }
 

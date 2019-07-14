@@ -11,12 +11,12 @@ describe('Tests for test functions', () => {
 
   test('Check MD5 different', () => {
     const f1 = path.join(__dirname, 'testUtils.test.ts')
-    const f2 = path.join(__dirname, 'pipeUntilLimit.test.ts')
+    const f2 = path.join(__dirname, 'flowUntilLimit.test.ts')
     expect(checkMD5(f1, f2)).toBe(false)
   })
 
   test('Check MD5 equal', () => {
-    const f1 = path.join(__dirname, 'pipeUntilLimit.test.ts')
+    const f1 = path.join(__dirname, 'flowUntilLimit.test.ts')
     expect(checkMD5(f1, f1)).toBe(true)
   })
 

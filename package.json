@@ -28,10 +28,9 @@
     "url": "https://github.com/hermes-serverless/stream-utils/issues"
   },
   "homepage": "https://github.com/hermes-serverless/stream-utils#readme",
-  "dependencies": {
-    "@hermes-project/custom-promises": "^0.0.1"
-  },
+  "dependencies": {},
   "devDependencies": {
+    "@hermes-serverless/custom-promises": "^0.0.1",
     "@types/execa": "^0.9.0",
     "@types/jest": "^24.0.11",
     "@types/md5-file": "^4.0.0",

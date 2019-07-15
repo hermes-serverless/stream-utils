@@ -158,10 +158,10 @@
     reflect-metadata "^0.1.12"
     tslib "^1.8.1"
 
-"@hermes-project/custom-promises@^0.0.1":
+"@hermes-serverless/custom-promises@^0.0.1":
   version "0.0.1"
-  resolved "https://registry.yarnpkg.com/@hermes-project/custom-promises/-/custom-promises-0.0.1.tgz#859a59fce2c5c51f46e0c1f8671a5c46cd26a1d1"
-  integrity sha512-5P4rEtYMOLvAoVjvly8Co6O6+k8riJTq31nNS4vnILBKhRjrj0YM7BK9zZeB4rzz0fKVf5m43klbTuapY4nAIQ==
+  resolved "https://registry.yarnpkg.com/@hermes-serverless/custom-promises/-/custom-promises-0.0.1.tgz#e51e38c40c2334a23c08dc6f0abf306c5a051b15"
+  integrity sha512-BNU2j0JGt2pJeCahNAnLdQAHsVQai4Y/8orcKl04m72WPAmgqvOJnTpP89njWZ9RRB7114OPcI3/RySBSrDXSQ==
 
 "@jest/console@^24.7.1":
   version "24.7.1"

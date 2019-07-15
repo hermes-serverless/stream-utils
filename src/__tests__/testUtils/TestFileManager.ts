@@ -1,4 +1,4 @@
-import { Waiter } from '@hermes-project/custom-promises'
+import { Waiter } from '@hermes-serverless/custom-promises'
 import { randomBytes } from 'crypto'
 import execa from 'execa'
 import fs from 'fs'

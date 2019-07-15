@@ -1,4 +1,4 @@
-import { Waiter } from '@hermes-project/custom-promises'
+import { Waiter } from '@hermes-serverless/custom-promises'
 import fs from 'fs'
 import md5 from 'md5-file'
 import os from 'os'

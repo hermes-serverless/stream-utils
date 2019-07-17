@@ -4,29 +4,32 @@ set -euo pipefail
 display_info() {
   printf "Usage ./stressTest.sh [OPT]\nOptions are:\n"
   printf "  -t [number]: Define the running time\n"
+  printf "  -f [fileToTest]: Define the file to test\n"
   exit 0
 }
 
 TOTALTIME=30
-while getopts "ht:" OPT; do
+COMMAND="test"
+while getopts "ht:f:" OPT; do
   case "$OPT" in
     "t") TOTALTIME=$OPTARG;;
+    "f") COMMAND="jest $OPTARG --logHeapUsage";;
     "h") display_info;;
     "?") display_info;;
   esac 
 done
 
-printf "=== STRESS TEST FOR: %s SECONDS ===\n\n" "$TOTALTIME"
+printf "=== STRESS TEST FOR: %s SECONDS - Command: $COMMAND ===\n\n" "$TOTALTIME"
 
 SECONDS=0
 
-yarn test
+yarn $COMMAND
 while [ "$?" == "0" ]; do
   printf "====== SECONDS: %s =======\n\n" "$SECONDS"
   if [ $SECONDS -gt $TOTALTIME ]; then
     exit 0
   fi
-  yarn test
+  yarn $COMMAND
 done
 
 printf "=== DONE STRESS ==="

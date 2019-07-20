@@ -158,10 +158,17 @@
     reflect-metadata "^0.1.12"
     tslib "^1.8.1"
 
-"@hermes-serverless/custom-promises@^0.0.1":
-  version "0.0.1"
-  resolved "https://registry.yarnpkg.com/@hermes-serverless/custom-promises/-/custom-promises-0.0.1.tgz#e51e38c40c2334a23c08dc6f0abf306c5a051b15"
-  integrity sha512-BNU2j0JGt2pJeCahNAnLdQAHsVQai4Y/8orcKl04m72WPAmgqvOJnTpP89njWZ9RRB7114OPcI3/RySBSrDXSQ==
+"@hermes-serverless/custom-promises@^0.1.0":
+  version "0.1.0"
+  resolved "https://registry.yarnpkg.com/@hermes-serverless/custom-promises/-/custom-promises-0.1.0.tgz#7ca32a0d3a3eb98cffc3ffcc4e09d91e23488ddb"
+  integrity sha512-87kSSjEZGTb98VBIc59KFm3KZa4Zln+ChNK8LbR7lEVt8/RtIZOHgp5wHrFMX03EchQH1Ru3805bU0BaxAA11Q==
+
+"@hermes-serverless/fs-utils@^0.0.2":
+  version "0.0.2"
+  resolved "https://registry.yarnpkg.com/@hermes-serverless/fs-utils/-/fs-utils-0.0.2.tgz#c953f6582f50ee35bc1e15bb20b96b3dffb572e1"
+  integrity sha512-CTn4m5RRjQpi1YmZgw7xh3RX7lHZh8HJcgQHqPKi04gatAmq6IeZCa/7Iu0Rr5ueUDuL7M4XHQYEZFreyEKUfA==
+  dependencies:
+    "@hermes-serverless/custom-promises" "^0.1.0"
 
 "@jest/console@^24.7.1":
   version "24.7.1"

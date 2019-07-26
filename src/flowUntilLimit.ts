@@ -1,8 +1,9 @@
+import makeArray from 'make-array'
 import stream, { Readable, Writable } from 'stream'
 import util from 'util'
 
 interface FlowUntilLimitOptions {
-  dest?: Writable
+  dest?: Writable | Writable[]
   limit?: number
   onData?: (data: Buffer | string) => void
   onLimit?: () => void
@@ -10,7 +11,7 @@ interface FlowUntilLimitOptions {
 
 type Nullable<T> = T | null
 interface NormalizedOptions {
-  dest: Nullable<Writable>
+  dest: Nullable<Writable | Writable[]>
   limit: Nullable<number>
   onData: Nullable<(data: Buffer | string) => void>
   onLimit: Nullable<() => void | null>
@@ -44,7 +45,22 @@ export const flowUntilLimit = async (src: Readable, options?: FlowUntilLimitOpti
   )
 
   let dataTransfered = 0
-  let isDrained = true
+  let flooded = 0
+
+  const onDrain = (index: number) => () => {
+    if (destArr[index].flooded) {
+      destArr[index].flooded = false
+      flooded -= 1
+    }
+    if (closedSrc) destArr[index].stream.end()
+    src.resume()
+  }
+
+  const destArr = (makeArray(dest) as Writable[]).map((el, index) => ({
+    flooded: false,
+    stream: el,
+    onDrain: onDrain(index),
+  }))
 
   let closedSrc = false
   const closeSrc = () => {
@@ -52,7 +68,9 @@ export const flowUntilLimit = async (src: Readable, options?: FlowUntilLimitOpti
     closedSrc = true
     src.removeListener('data', onData)
     src.resume()
-    if (isDrained && dest != null) dest.end()
+    destArr.forEach(el => {
+      if (!el.flooded) el.stream.end()
+    })
   }
 
   const onData = (chunk: Buffer) => {
@@ -66,13 +84,17 @@ export const flowUntilLimit = async (src: Readable, options?: FlowUntilLimitOpti
         dataToWrite = dataToWrite.slice(0, allowedSize)
       }
 
-      const ret = dest != null ? dest.write(dataToWrite) : true
+      destArr.forEach(el => {
+        const res = el.stream.write(dataToWrite)
+        if (!res && !el.flooded) {
+          el.flooded = true
+          flooded += 1
+        }
+      })
+
       dataTransfered += dataToWrite.length
       if (onDataCallback) onDataCallback(dataToWrite)
-      if (!ret) {
-        isDrained = false
-        src.pause()
-      }
+      if (flooded > 0) src.pause()
     }
 
     if (exceedLimit) {
@@ -81,14 +103,8 @@ export const flowUntilLimit = async (src: Readable, options?: FlowUntilLimitOpti
     }
   }
 
-  const onDrain = () => {
-    isDrained = true
-    if (closedSrc) dest.end()
-    src.resume()
-  }
-
   src.on('data', onData)
-  if (dest != null) dest.on('drain', onDrain)
+  destArr.forEach(el => el.stream.on('drain', el.onDrain))
 
   const finishSrc = util
     .promisify(stream.finished)(src)
@@ -96,14 +112,13 @@ export const flowUntilLimit = async (src: Readable, options?: FlowUntilLimitOpti
       src.removeListener('data', onData)
     })
 
-  const finishDest =
-    dest != null
-      ? util
-          .promisify(stream.finished)(dest)
-          .finally(() => {
-            dest.removeListener('drain', onDrain)
-          })
-      : Promise.resolve()
+  const finishDestArr = Promise.all(
+    destArr.map(el => {
+      return util
+        .promisify(stream.finished)(el.stream)
+        .catch(closeSrc)
+    })
+  )
 
   let error
   try {
@@ -115,7 +130,7 @@ export const flowUntilLimit = async (src: Readable, options?: FlowUntilLimitOpti
   closeSrc()
 
   try {
-    await finishDest
+    await finishDestArr
   } catch (err) {
     if (!error) error = err
   }

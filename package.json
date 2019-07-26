@@ -1,6 +1,6 @@
 {
   "name": "@hermes-serverless/stream-utils",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "",
   "main": "build/index.js",
   "types": "build/index.d.ts",
@@ -29,7 +29,8 @@
   },
   "homepage": "https://github.com/hermes-serverless/stream-utils#readme",
   "dependencies": {
-    "@hermes-serverless/custom-promises": "^0.1.0"
+    "@hermes-serverless/custom-promises": "^0.1.0",
+    "make-array": "^1.0.5"
   },
   "devDependencies": {
     "@hermes-serverless/fs-utils": "^0.0.2",

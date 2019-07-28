@@ -1,10 +1,22 @@
 import { Transform, TransformOptions } from 'stream'
-import { _canTransferData, _willSurpassLimit } from './flowUntilLimit'
 
-interface LimitStreamOptions {
+export interface LimitStreamOptions {
   limit?: number
   onData?: (data: Buffer | string) => void
   onLimit?: () => void
+}
+
+type Nullable<T> = T | null
+export const _canTransferData = (dataTransfered: number, limit: Nullable<number>) => {
+  return limit == null || dataTransfered < limit
+}
+
+export const _willSurpassLimit = (
+  dataToWrite: string | Buffer,
+  dataTransfered: number,
+  limit: Nullable<number>
+) => {
+  return limit != null && dataTransfered + dataToWrite.length > limit
 }
 
 export class LimitStream extends Transform {
@@ -31,21 +43,19 @@ export class LimitStream extends Transform {
     let dataToWrite = chunk
     this.limitReached = _willSurpassLimit(dataToWrite, this.bytesTransfered, this.limit)
     if (this.limit <= 0 && this.onData) this.onData(Buffer.from(''))
+
     if (_canTransferData(this.bytesTransfered, this.limit)) {
       if (this.limitReached) {
         const allowedSize = this.limit - this.bytesTransfered
         dataToWrite = dataToWrite.slice(0, allowedSize)
       }
 
-      const res = this.push(dataToWrite)
+      this.push(dataToWrite)
       this.bytesTransfered += dataToWrite.length
       if (this.onData) this.onData(dataToWrite)
     }
-    if (this.limitReached) {
-      if (this.onLimit) this.onLimit()
-      this.push(null)
-    }
 
+    if (this.limitReached && this.onLimit) this.onLimit()
     return cb(null)
   }
 

@@ -2,6 +2,7 @@ import fs from 'fs'
 import { pipeline } from 'stream'
 import util from 'util'
 import { LimitStream, _canTransferData, _willSurpassLimit } from '../LimitStream'
+import { streamFinished } from '../streamFinished'
 import { checkMD5, checkSize, getReadStream, TestFileManager } from './testUtils'
 
 const MB = 1000
@@ -81,9 +82,9 @@ describe('Check if streaming for LimitStream is working properly', () => {
     const { file, filepath } = await testFiles.getWriteStream()
     const src = await getReadStream(testFile)
     const pass = new LimitStream()
+    const p = Promise.all([streamFinished(src), streamFinished(file)])
     await util.promisify(pipeline)(src, pass, file)
-    src.destroy()
-    file.destroy()
+    await p
     expect(checkSize(testFile, filepath)).toBe(true)
     expect(checkMD5(testFile, filepath)).toBe(true)
   })
@@ -92,10 +93,10 @@ describe('Check if streaming for LimitStream is working properly', () => {
     const src = await getReadStream(testFile)
     const pass = new LimitStream()
     const promise = util.promisify(pipeline)(src, pass)
+    const p = Promise.all([streamFinished(src), streamFinished(pass)])
     pass.resume()
     await promise
-
-    src.destroy()
+    await p
     const { size } = fs.statSync(testFile)
     expect(pass.getBytesTransfered()).toBe(size)
   })
@@ -131,10 +132,9 @@ describe('Check if limits for LimitStream is working properly', () => {
         onLimit,
       })
 
+      const p = Promise.all([streamFinished(src), streamFinished(pass), streamFinished(file)])
       await util.promisify(pipeline)(src, pass, file)
-
-      src.destroy()
-      file.destroy()
+      await p
 
       try {
         const allDataBuffer = Buffer.concat(buffers)
@@ -210,11 +210,11 @@ describe('Check if limits for LimitStream is working properly', () => {
         onData,
         onLimit,
       })
+      const p = Promise.all([streamFinished(src), streamFinished(pass)])
       const promise = util.promisify(pipeline)(src, pass)
       pass.resume()
       await promise
-
-      src.destroy()
+      await p
 
       const allDataBuffer = Buffer.concat(buffers)
       expect(allDataBuffer.length).toBe(expectedBufferSize)

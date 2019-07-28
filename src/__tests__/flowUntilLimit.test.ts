@@ -1,7 +1,7 @@
-import { Waiter } from '@hermes-serverless/custom-promises'
 import fs from 'fs'
 import { PassThrough } from 'stream'
 import { flowUntilLimit, normalizeToWritableWithEnd } from '../flowUntilLimit'
+import { streamFinished } from '../streamFinished'
 import { checkMD5, checkSize, getReadStream, TestFileManager } from './testUtils'
 
 const MB = 1000
@@ -99,12 +99,12 @@ describe('Check if streaming for flowUntilLimit is working properly', () => {
       const { file, filepath } = await testFiles.getWriteStream()
       const src = await getReadStream(testFile)
 
+      const p = Promise.all([streamFinished(src), streamFinished(file)])
       await flowUntilLimit(src, {
         dest: file,
       })
 
-      src.destroy()
-      file.destroy()
+      await p
       expect(checkSize(testFile, filepath)).toBe(true)
       expect(checkMD5(testFile, filepath)).toBe(true)
     })
@@ -115,12 +115,16 @@ describe('Check if streaming for flowUntilLimit is working properly', () => {
       const f = await Promise.all([testFiles.getWriteStream(), testFiles.getWriteStream()])
       const src = await getReadStream(testFile)
 
+      const p = Promise.all([
+        streamFinished(src),
+        streamFinished(f[0].file),
+        streamFinished(f[1].file),
+      ])
       await flowUntilLimit(src, {
         dest: f.map(el => el.file),
       })
 
-      src.destroy()
-      f.forEach(el => el.file.destroy())
+      await p
       f.forEach(el => {
         expect(checkSize(testFile, el.filepath)).toBe(true)
         expect(checkMD5(testFile, el.filepath)).toBe(true)
@@ -133,33 +137,31 @@ describe('Check if streaming for flowUntilLimit is working properly', () => {
       const f = await Promise.all([testFiles.getWriteStream(), testFiles.getWriteStream()])
       const src = await getReadStream(testFile)
 
-      const wait = new Waiter()
-      f[1].file.on('close', () => {
-        src.destroy()
-        f.forEach(el => el.file.destroy())
-        f.forEach(el => {
-          expect(checkSize(testFile, el.filepath)).toBe(true)
-          expect(checkMD5(testFile, el.filepath)).toBe(true)
-        })
-        wait.resolve()
-      })
-
+      const p = Promise.all([
+        streamFinished(src),
+        streamFinished(f[0].file),
+        streamFinished(f[1].file),
+      ])
       await flowUntilLimit(src, {
         dest: [f[0].file, { stream: f[1].file, end: false }],
       })
 
       f[1].file.end()
-      await wait
+      await p
+
+      f.forEach(el => {
+        expect(checkSize(testFile, el.filepath)).toBe(true)
+        expect(checkMD5(testFile, el.filepath)).toBe(true)
+      })
     })
   })
 
   describe('Without dest stream', () => {
     test.each(testFiles.files)('%s', async (_, bytes, testFile) => {
       const src = await getReadStream(testFile)
-
+      const p = Promise.all([streamFinished(src)])
       const dataTransfered = await flowUntilLimit(src)
-
-      src.destroy()
+      await p
       const { size } = fs.statSync(testFile)
       expect(dataTransfered).toBe(size)
     })
@@ -181,7 +183,9 @@ describe('Check if limits for flowUntilLimit is working properly', () => {
       })
 
       const src = await getReadStream(testFile)
+
       const { file: dest, filepath } = await testFiles.getWriteStream()
+      const p = Promise.all([streamFinished(src), streamFinished(dest)])
 
       await flowUntilLimit(src, {
         limit,
@@ -190,9 +194,7 @@ describe('Check if limits for flowUntilLimit is working properly', () => {
         dest,
       })
 
-      src.destroy()
-      dest.destroy()
-
+      await p
       try {
         const allDataBuffer = Buffer.concat(buffers)
         const resBuffer = fs.readFileSync(filepath)
@@ -263,7 +265,11 @@ describe('Check if limits for flowUntilLimit is working properly', () => {
 
       const src = await getReadStream(testFile)
       const f = await Promise.all([testFiles.getWriteStream(), testFiles.getWriteStream()])
-
+      const p = Promise.all([
+        streamFinished(src),
+        streamFinished(f[0].file),
+        streamFinished(f[1].file),
+      ])
       await flowUntilLimit(src, {
         limit,
         onLimit,
@@ -271,8 +277,7 @@ describe('Check if limits for flowUntilLimit is working properly', () => {
         dest: f.map(el => el.file),
       })
 
-      src.destroy()
-      f.forEach(el => el.file.destroy())
+      await p
 
       const allDataBuffer = Buffer.concat(buffers)
       expect(allDataBuffer.length).toBe(expectedBufferSize)
@@ -351,28 +356,11 @@ describe('Check if limits for flowUntilLimit is working properly', () => {
 
       const src = await getReadStream(testFile)
       const f = await Promise.all([testFiles.getWriteStream(), testFiles.getWriteStream()])
-
-      const wait = new Waiter()
-      f[1].file.on('close', () => {
-        src.destroy()
-
-        const allDataBuffer = Buffer.concat(buffers)
-        expect(allDataBuffer.length).toBe(expectedBufferSize)
-
-        f.forEach(el => {
-          try {
-            const resBuffer = fs.readFileSync(el.filepath)
-            expect(resBuffer.length).toBe(expectedBufferSize)
-            expect(resBuffer.equals(allDataBuffer)).toBe(true)
-          } catch (err) {
-            console.error(`Error reading file ${el.filepath}`, err)
-            console.log(testFiles.getFilesOnDir())
-            throw err
-          }
-        })
-
-        wait.resolve()
-      })
+      const p = Promise.all([
+        streamFinished(src),
+        streamFinished(f[0].file),
+        streamFinished(f[1].file),
+      ])
 
       await flowUntilLimit(src, {
         limit,
@@ -382,7 +370,22 @@ describe('Check if limits for flowUntilLimit is working properly', () => {
       })
 
       f[1].file.end()
-      await wait
+      await p
+
+      const allDataBuffer = Buffer.concat(buffers)
+      expect(allDataBuffer.length).toBe(expectedBufferSize)
+
+      f.forEach(el => {
+        try {
+          const resBuffer = fs.readFileSync(el.filepath)
+          expect(resBuffer.length).toBe(expectedBufferSize)
+          expect(resBuffer.equals(allDataBuffer)).toBe(true)
+        } catch (err) {
+          console.error(`Error reading file ${el.filepath}`, err)
+          console.log(testFiles.getFilesOnDir())
+          throw err
+        }
+      })
 
       return {
         onData,
@@ -445,6 +448,7 @@ describe('Check if limits for flowUntilLimit is working properly', () => {
       })
 
       const src = await getReadStream(testFile)
+      const p = Promise.all([streamFinished(src)])
 
       const dataTransfered = await flowUntilLimit(src, {
         limit,
@@ -452,7 +456,7 @@ describe('Check if limits for flowUntilLimit is working properly', () => {
         onData,
       })
 
-      src.destroy()
+      await p
 
       const allDataBuffer = Buffer.concat(buffers)
       expect(allDataBuffer.length).toBe(expectedBufferSize)

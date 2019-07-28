@@ -1,140 +1,69 @@
 import makeArray from 'make-array'
-import stream, { Readable, Writable } from 'stream'
-import util from 'util'
+import { Readable, Writable } from 'stream'
+import { LimitStream, LimitStreamOptions } from './LimitStream'
+import { streamFinished } from './streamFinished'
 
-interface FlowUntilLimitOptions {
-  dest?: Writable | Writable[]
-  limit?: number
-  onData?: (data: Buffer | string) => void
-  onLimit?: () => void
+export interface WritableWithEnd {
+  stream: Writable
+  end?: boolean
 }
 
-type Nullable<T> = T | null
-interface NormalizedOptions {
-  dest: Nullable<Writable | Writable[]>
-  limit: Nullable<number>
-  onData: Nullable<(data: Buffer | string) => void>
-  onLimit: Nullable<() => void | null>
+interface FlowUntilLimitOptions extends LimitStreamOptions {
+  dest?: Writable | Writable[] | (Writable | WritableWithEnd)[]
 }
 
-const normalizeOpts = (options: FlowUntilLimitOptions): NormalizedOptions => {
-  return {
-    dest: null,
-    limit: null,
-    onData: null,
-    onLimit: null,
-    ...options,
-  } as NormalizedOptions
-}
-
-export const _canTransferData = (dataTransfered: number, limit: Nullable<number>) => {
-  return limit == null || dataTransfered < limit
-}
-
-export const _willSurpassLimit = (
-  dataToWrite: string | Buffer,
-  dataTransfered: number,
-  limit: Nullable<number>
+export const normalizeToWritableWithEnd = (
+  obj: Writable | WritableWithEnd | (Writable | WritableWithEnd)[]
 ) => {
-  return limit != null && dataTransfered + dataToWrite.length > limit
+  return (makeArray(obj) as (Writable | WritableWithEnd)[]).map(
+    (el): WritableWithEnd => {
+      if (el.hasOwnProperty('stream')) return { end: true, ...(el as WritableWithEnd) }
+      return { stream: el as Writable, end: true }
+    }
+  )
 }
 
 export const flowUntilLimit = async (src: Readable, options?: FlowUntilLimitOptions) => {
-  const { dest, onData: onDataCallback, onLimit: onLimitCallback, limit } = normalizeOpts(
-    options || {}
+  const { dest, onData, onLimit, limit }: FlowUntilLimitOptions = options || {}
+
+  const limitcb = () => {
+    src.unpipe(limiter)
+    src.resume()
+    limiter.end()
+    if (onLimit) onLimit()
+  }
+
+  const destArr = normalizeToWritableWithEnd(dest)
+  const limiter = new LimitStream({ onData, limit, onLimit: limitcb })
+  src.pipe(limiter)
+  destArr.forEach(el =>
+    limiter.pipe(
+      el.stream,
+      { end: el.end }
+    )
   )
 
-  let dataTransfered = 0
-  let flooded = 0
+  if (destArr.length === 0) limiter.resume()
 
-  const onDrain = (index: number) => () => {
-    if (destArr[index].flooded) {
-      destArr[index].flooded = false
-      flooded -= 1
-    }
-    if (closedSrc) destArr[index].stream.end()
-    src.resume()
-  }
-
-  const destArr = (makeArray(dest) as Writable[]).map((el, index) => ({
-    flooded: false,
-    stream: el,
-    onDrain: onDrain(index),
-  }))
-
-  let closedSrc = false
-  const closeSrc = () => {
-    if (closedSrc) return
-    closedSrc = true
-    src.removeListener('data', onData)
-    src.resume()
-    destArr.forEach(el => {
-      if (!el.flooded) el.stream.end()
-    })
-  }
-
-  const onData = (chunk: Buffer) => {
-    let dataToWrite = chunk
-    const exceedLimit = _willSurpassLimit(dataToWrite, dataTransfered, limit)
-    if (limit <= 0 && onDataCallback) onDataCallback(Buffer.from(''))
-
-    if (_canTransferData(dataTransfered, limit)) {
-      if (exceedLimit) {
-        const allowedSize = limit - dataTransfered
-        dataToWrite = dataToWrite.slice(0, allowedSize)
-      }
-
-      destArr.forEach(el => {
-        const res = el.stream.write(dataToWrite)
-        if (!res && !el.flooded) {
-          el.flooded = true
-          flooded += 1
-        }
-      })
-
-      dataTransfered += dataToWrite.length
-      if (onDataCallback) onDataCallback(dataToWrite)
-      if (flooded > 0) src.pause()
-    }
-
-    if (exceedLimit) {
-      if (onLimitCallback) onLimitCallback()
-      closeSrc()
-    }
-  }
-
-  src.on('data', onData)
-  destArr.forEach(el => el.stream.on('drain', el.onDrain))
-
-  const finishSrc = util
-    .promisify(stream.finished)(src)
-    .finally(() => {
-      src.removeListener('data', onData)
-    })
-
-  const finishDestArr = Promise.all(
-    destArr.map(el => {
-      return util
-        .promisify(stream.finished)(el.stream)
-        .catch(closeSrc)
-    })
+  const errors = []
+  const limiterPromise = streamFinished(limiter)
+  const destPromise = Promise.all(
+    destArr.map(el =>
+      el.end ? streamFinished(el.stream).catch(err => errors.push(err)) : limiterPromise
+    )
   )
-
-  let error
   try {
-    await finishSrc
+    await limiterPromise
   } catch (err) {
-    error = err
+    errors.push(err)
   }
 
-  closeSrc()
-
   try {
-    await finishDestArr
+    await destPromise
   } catch (err) {
-    if (!error) error = err
+    errors.push(err)
   }
 
-  if (error) throw error
-  return dataTransfered
+  if (errors.length > 0) throw errors
+  return limiter.getBytesTransfered()
 }

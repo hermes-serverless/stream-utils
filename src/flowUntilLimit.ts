@@ -28,7 +28,7 @@ export const flowUntilLimit = async (src: Readable, options?: FlowUntilLimitOpti
 
   const limitcb = () => {
     src.unpipe(limiter)
-    src.resume()
+    src.on('readable', src.read.bind(src))
     limiter.end()
     if (onLimit) onLimit()
   }

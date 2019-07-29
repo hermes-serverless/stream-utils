@@ -1,3 +1,3 @@
-export { flowUntilLimit } from './flowUntilLimit'
+export { flowUntilLimit, normalizeToWritableWithEnd, WritableWithEnd } from './flowUntilLimit'
 export { streamFinished } from './streamFinished'
 export { StringStream } from './StringStream'

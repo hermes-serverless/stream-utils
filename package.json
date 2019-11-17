@@ -16,7 +16,8 @@
     "format": "prettier --config ./prettier.config.js --write \"src/**/*.ts\" \"src/**/*.js\"",
     "preversion": "yarn lint && yarn format",
     "version": "git add --all",
-    "postversion": "git push && git push --tags"
+    "postversion": "git push && git push --tags",
+    "coverage": "jest --coverage && cat ./coverage/lcov.info | coveralls"
   },
   "repository": {
     "type": "git",
@@ -38,6 +39,7 @@
     "@types/jest": "^24.0.11",
     "@types/md5-file": "^4.0.0",
     "@types/node": "^12.6.1",
+    "coveralls": "^3.0.7",
     "execa": "^2.0.3",
     "jest": "^24.7.1",
     "md5-file": "^4.0.0",
